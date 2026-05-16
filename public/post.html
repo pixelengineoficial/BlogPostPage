@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Post — Nexus Blog</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+  <header id="site-header"></header>
+
+  <main class="container" style="padding-top:24px;padding-bottom:40px">
+    <div class="layout">
+      <article id="post-article">
+        <!-- Skeleton -->
+        <div id="post-skeleton">
+          <div class="skeleton" style="height:300px;border-radius:6px;margin-bottom:20px"></div>
+          <div class="skeleton" style="height:28px;width:80%;margin-bottom:12px"></div>
+          <div class="skeleton" style="height:14px;width:50%;margin-bottom:24px"></div>
+          <div class="skeleton" style="height:12px;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:12px;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:12px;width:60%"></div>
+        </div>
+        <div id="post-content-wrap" class="hidden"></div>
+      </article>
+
+      <aside class="sidebar" id="sidebar"></aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-logo">NEXUS BLOG</div>
+      <div class="footer-text">© 2024 Nexus Blog</div>
+    </div>
+  </footer>
+
+  <div id="toast-container"></div>
+
+  <script src="/app.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/socket.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const postId = params.get('id');
+
+    if (!postId) window.location.href = '/';
+
+    let currentPost = null;
+    let comments = [];
+
+    // ── Render post ─────────────────────────────────────
+    async function loadPost() {
+      try {
+        const post = await api.get('/api/posts/' + encodeURIComponent(postId));
+        currentPost = post;
+        document.title = post.title + ' — Nexus Blog';
+        renderPost(post);
+        loadComments(post.id);
+        // count view
+        fetch('/api/posts/' + post.id + '/view', { method: 'POST' }).catch(() => {});
+      } catch (err) {
+        document.getElementById('post-skeleton').innerHTML = `
+          <div class="empty-state"><div class="icon">😢</div><p>Post não encontrado</p></div>
+          <div style="text-align:center;margin-top:16px"><a href="/" class="btn btn-outline">← Voltar</a></div>
+        `;
+      }
+    }
+
+    function renderPost(post) {
+      document.getElementById('post-skeleton').classList.add('hidden');
+      const wrap = document.getElementById('post-content-wrap');
+      wrap.classList.remove('hidden');
+
+      const catBadge = post.category
+        ? `<span class="cat-badge" style="background:${post.category.color ? post.category.color + '22' : ''};color:${post.category.color || 'var(--gold)'};border-color:${post.category.color ? post.category.color + '55' : ''}">${escHtml(post.category.name)}</span>`
+        : '';
+      const pinnedBadge   = post.isPinned   ? '<span class="cat-badge pinned-badge">📌 Fixado</span>' : '';
+      const featuredBadge = post.isFeatured ? '<span class="cat-badge featured-badge">⭐ Destaque</span>' : '';
+
+      const tagsHtml = post.tags && post.tags.length > 0
+        ? `<div class="tags-row">${post.tags.map(t => `<a href="/?tag=${encodeURIComponent(t)}" class="tag-badge">#${escHtml(t)}</a>`).join('')}</div>`
+        : '';
+
+      const coverHtml = post.coverImageUrl
+        ? `<img class="post-cover-full" src="${escHtml(post.coverImageUrl)}" alt="" loading="lazy" />`
+        : '';
+
+      const adminLinks = Auth.isAdmin()
+        ? `<a href="/admin.html?section=posts&edit=${post.id}" class="btn btn-outline btn-sm">✏️ Editar</a>` : '';
+
+      wrap.innerHTML = `
+        ${coverHtml}
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          ${catBadge}${pinnedBadge}${featuredBadge}
+        </div>
+
+        <h1 class="post-title-full">${escHtml(post.title)}</h1>
+
+        <div class="post-meta-row">
+          <div class="post-author">
+            <div id="post-avatar-wrap"></div>
+            <div>
+              <div class="name">${escHtml(post.author?.username || 'Autor')}</div>
+              <span class="role-badge" style="background:rgba(212,168,83,.15);color:var(--gold)">${post.author?.role || ''}</span>
+            </div>
+          </div>
+          <span class="text-muted text-sm">${formatDate(post.createdAt)}</span>
+          <div style="display:flex;align-items:center;gap:12px;color:var(--muted);font-size:.78rem">
+            <span>👁 ${post.viewCount||0}</span>
+            <span>💬 ${post.commentCount||0}</span>
+          </div>
+          ${adminLinks}
+        </div>
+
+        <div class="post-content" id="post-body"></div>
+
+        ${tagsHtml}
+
+        <div style="margin-top:20px;display:flex;align-items:center;gap:12px">
+          <button class="like-btn ${post.likedByMe ? 'liked' : ''}" id="like-btn" onclick="toggleLike()">
+            <span class="icon">${post.likedByMe ? '❤️' : '🤍'}</span>
+            <span id="like-count">${post.likeCount||0}</span> curtidas
+          </button>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Comments -->
+        <div id="comments-section">
+          <h2 style="font-family:var(--font-head);font-size:.85rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:16px">
+            💬 Comentários (<span id="comment-count">${post.commentCount||0}</span>)
+          </h2>
+
+          ${Auth.isLogged() ? `
+            <form id="comment-form" style="margin-bottom:20px">
+              <div class="form-group">
+                <textarea id="comment-input" class="form-control" rows="3" placeholder="Escreva um comentário..." style="min-height:80px"></textarea>
+              </div>
+              <div id="comment-error" class="form-error hidden"></div>
+              <button type="submit" class="btn btn-gold btn-sm">Comentar</button>
+            </form>
+          ` : `
+            <div class="card" style="padding:14px;text-align:center;margin-bottom:20px">
+              <p style="font-size:.82rem;color:var(--muted);margin-bottom:10px">Faça login para comentar</p>
+              <a href="/login.html?redirect=${encodeURIComponent(window.location.href)}" class="btn btn-gold btn-sm">Login</a>
+            </div>
+          `}
+
+          <div id="comments-list">
+            <div class="skeleton" style="height:60px;margin-bottom:8px"></div>
+            <div class="skeleton" style="height:60px"></div>
+          </div>
+        </div>
+      `;
+
+      // Insert avatar
+      const avatarWrap = document.getElementById('post-avatar-wrap');
+      if (avatarWrap) avatarWrap.appendChild(avatarEl(post.author));
+
+      // Render markdown content
+      const bodyEl = document.getElementById('post-body');
+      if (bodyEl && typeof marked !== 'undefined') {
+        bodyEl.innerHTML = marked.parse(post.content || '');
+      } else if (bodyEl) {
+        bodyEl.textContent = post.content || '';
+      }
+
+      // Comment form
+      const form = document.getElementById('comment-form');
+      if (form) {
+        form.addEventListener('submit', submitComment);
+      }
+    }
+
+    // ── Like ────────────────────────────────────────────
+    async function toggleLike() {
+      if (!Auth.requireLogin()) return;
+      try {
+        const data = await api.post('/api/posts/' + currentPost.id + '/like');
+        document.getElementById('like-count').textContent = data.likeCount;
+        const btn = document.getElementById('like-btn');
+        btn.className = 'like-btn' + (data.liked ? ' liked' : '');
+        btn.querySelector('.icon').textContent = data.liked ? '❤️' : '🤍';
+      } catch (err) {
+        Toast.error('Erro ao curtir: ' + err.message);
+      }
+    }
+
+    // ── Comments ────────────────────────────────────────
+    async function loadComments(postId) {
+      try {
+        comments = await api.get('/api/posts/' + postId + '/comments');
+        renderComments();
+      } catch (err) {
+        document.getElementById('comments-list').innerHTML = '<p class="text-muted text-sm">Erro ao carregar comentários</p>';
+      }
+    }
+
+    function renderComments() {
+      const list = document.getElementById('comments-list');
+      if (!list) return;
+
+      if (!comments || comments.length === 0) {
+        list.innerHTML = '<div class="empty-state"><div class="icon">💬</div><p>Seja o primeiro a comentar!</p></div>';
+        return;
+      }
+
+      list.innerHTML = '';
+      const user = Auth.user();
+      comments.forEach(c => {
+        const div = document.createElement('div');
+        div.className = 'comment';
+        div.dataset.id = c.id;
+
+        const canDelete = user && (user.role === 'ADMIN' || user.role === 'OWNER' || user.id === c.authorId);
+        div.innerHTML = `
+          <div>${avatarEl(c.author, 'sm').outerHTML}</div>
+          <div style="flex:1;min-width:0">
+            <div class="comment-meta">
+              <span class="comment-author">${escHtml(c.author?.username || '?')}</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="comment-date">${formatRelative(c.createdAt)}</span>
+                ${canDelete ? `<button class="btn-icon" title="Deletar" onclick="deleteComment(${c.id})" style="font-size:.75rem">🗑</button>` : ''}
+              </div>
+            </div>
+            <div class="comment-body">${escHtml(c.content)}</div>
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    async function submitComment(e) {
+      e.preventDefault();
+      const input = document.getElementById('comment-input');
+      const errEl = document.getElementById('comment-error');
+      const btn = e.target.querySelector('button[type=submit]');
+      const content = input.value.trim();
+
+      if (!content) { errEl.textContent = 'Escreva algo'; errEl.classList.remove('hidden'); return; }
+      errEl.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Enviando...';
+
+      try {
+        await api.post('/api/posts/' + currentPost.id + '/comments', { content });
+        input.value = '';
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Comentar';
+      }
+    }
+
+    window.deleteComment = async function(id) {
+      if (!confirm('Deletar este comentário?')) return;
+      try {
+        await api.del('/api/comments/' + id);
+        comments = comments.filter(c => c.id !== id);
+        renderComments();
+        const countEl = document.getElementById('comment-count');
+        if (countEl) countEl.textContent = Math.max(0, parseInt(countEl.textContent) - 1);
+        Toast.success('Comentário deletado');
+      } catch (err) {
+        Toast.error('Erro: ' + err.message);
+      }
+    };
+
+    // ── Realtime: new comment ────────────────────────────
+    window.addEventListener('nexus:new_comment', (e) => {
+      const { postId, comment } = e.detail;
+      if (!currentPost || postId !== currentPost.id) return;
+      // Avoid duplicate if came from self
+      if (comments.find(c => c.id === comment.id)) return;
+      comments.unshift(comment);
+      renderComments();
+      const countEl = document.getElementById('comment-count');
+      if (countEl) countEl.textContent = parseInt(countEl.textContent || 0) + 1;
+    });
+
+    // ── Init ────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', async () => {
+      renderHeader();
+      await Promise.all([
+        loadPost(),
+        renderSidebar(document.getElementById('sidebar'))
+      ]);
+    });
+  </script>
+</body>
+</html>

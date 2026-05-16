@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Nexus Blog</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+  <header id="site-header"></header>
+
+  <div class="admin-layout">
+    <!-- Sidebar nav -->
+    <nav class="admin-nav">
+      <div class="admin-nav-title" style="margin-top:8px">PAINEL</div>
+      <div class="admin-nav-item active" data-section="dashboard"><span class="icon">📊</span>Dashboard</div>
+      <div class="admin-nav-item" data-section="posts"><span class="icon">📝</span>Posts</div>
+      <div class="admin-nav-item" data-section="post-editor"><span class="icon">✏️</span>Novo Post</div>
+      <div class="admin-nav-title" style="margin-top:12px">CONTEÚDO</div>
+      <div class="admin-nav-item" data-section="categories"><span class="icon">📁</span>Categorias</div>
+      <div class="admin-nav-item" data-section="comments"><span class="icon">💬</span>Comentários</div>
+      <div class="admin-nav-item" data-section="users" id="nav-users"><span class="icon">👥</span>Usuários</div>
+    </nav>
+
+    <!-- Main content -->
+    <div class="admin-content">
+
+      <!-- ── DASHBOARD ────────────────────────────────── -->
+      <section class="admin-section active" id="section-dashboard">
+        <div class="page-header">
+          <h1 class="page-title">PAINEL ADMIN</h1>
+          <button class="btn btn-gold" onclick="showSection('post-editor')">+ Novo Post</button>
+        </div>
+
+        <div class="stats-grid" id="stats-grid">
+          ${[
+            ['Posts','📝','var(--gold)'],
+            ['Usuários','👥','var(--purple)'],
+            ['Comentários','💬','var(--blue)'],
+            ['Visualizações','👁','var(--green)'],
+            ['Curtidas','❤️','var(--red)'],
+            ['Posts esta semana','📈','#f59e0b'],
+            ['Coments esta semana','💬','#8b5cf6'],
+            ['Top Posts','🏆','#ec4899']
+          ].map(([l]) => `<div class="stat-card"><div class="label">${l}</div><div class="skeleton" style="height:32px;width:60%"></div></div>`).join('')}
+        </div>
+
+        <div class="card" id="top-posts-card" style="margin-top:8px">
+          <div class="card-header"><span>🏆</span><h3>Posts Mais Vistos</h3></div>
+          <div class="card-body" id="top-posts-list"></div>
+        </div>
+      </section>
+
+      <!-- ── POSTS LIST ────────────────────────────────── -->
+      <section class="admin-section" id="section-posts">
+        <div class="page-header">
+          <h1 class="page-title">POSTS</h1>
+          <button class="btn btn-gold" onclick="showSection('post-editor');resetEditor()">+ Novo Post</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Título</th>
+                  <th>Categoria</th>
+                  <th>Status</th>
+                  <th>👁</th>
+                  <th>❤️</th>
+                  <th>💬</th>
+                  <th>Data</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="posts-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── POST EDITOR ───────────────────────────────── -->
+      <section class="admin-section" id="section-post-editor">
+        <div class="page-header">
+          <h1 class="page-title" id="editor-title">NOVO POST</h1>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" id="preview-toggle" onclick="togglePreview()">👁 Preview</button>
+            <button class="btn btn-gold" id="save-post-btn" onclick="savePost()">💾 Salvar</button>
+          </div>
+        </div>
+
+        <div id="editor-error" class="auth-alert error hidden" style="margin-bottom:12px"></div>
+
+        <div id="editor-split" style="display:grid;grid-template-columns:1fr;gap:16px">
+          <div id="editor-form-col">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Título *</label>
+                <input type="text" id="ed-title" class="form-control" placeholder="Título do post" />
+              </div>
+              <div class="form-group">
+                <label>Categoria</label>
+                <select id="ed-category" class="form-control">
+                  <option value="">Sem categoria</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Imagem de capa (URL)</label>
+              <input type="url" id="ed-cover" class="form-control" placeholder="https://..." />
+            </div>
+
+            <div class="form-group">
+              <label>Resumo</label>
+              <textarea id="ed-excerpt" class="form-control" rows="2" placeholder="Resumo curto..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Conteúdo * (Markdown)</label>
+              <textarea id="ed-content" class="form-control" rows="18" placeholder="Escreva em Markdown..."></textarea>
+            </div>
+
+            <div class="form-group">
+              <label>Tags (separadas por vírgula)</label>
+              <input type="text" id="ed-tags" class="form-control" placeholder="anime, games, retro" />
+            </div>
+
+            <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:8px">
+              <label class="form-check">
+                <input type="checkbox" id="ed-pinned" />
+                <span>📌 Fixar post</span>
+              </label>
+              <label class="form-check">
+                <input type="checkbox" id="ed-featured" />
+                <span>⭐ Destaque</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="editor-preview-col" class="hidden">
+            <div class="card">
+              <div class="card-header"><span>👁</span><h3>Preview do Conteúdo</h3></div>
+              <div class="card-body">
+                <div id="md-preview" class="post-content" style="min-height:200px"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <input type="hidden" id="ed-post-id" value="" />
+      </section>
+
+      <!-- ── CATEGORIES ────────────────────────────────── -->
+      <section class="admin-section" id="section-categories">
+        <div class="page-header">
+          <h1 class="page-title">CATEGORIAS</h1>
+          <button class="btn btn-gold" onclick="showCategoryModal()">+ Nova Categoria</button>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Nome</th><th>Slug</th><th>Cor</th><th>Posts</th><th>Ações</th></tr>
+              </thead>
+              <tbody id="categories-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── COMMENTS ──────────────────────────────────── -->
+      <section class="admin-section" id="section-comments">
+        <div class="page-header">
+          <h1 class="page-title">COMENTÁRIOS</h1>
+          <span id="comments-count" style="font-family:var(--font-head);font-size:.7rem;color:var(--muted)"></span>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Autor</th><th>Comentário</th><th>Post</th><th>Data</th><th>Ações</th></tr>
+              </thead>
+              <tbody id="comments-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── USERS ─────────────────────────────────────── -->
+      <section class="admin-section" id="section-users">
+        <div class="page-header">
+          <h1 class="page-title">USUÁRIOS</h1>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Usuário</th><th>Email</th><th>Role</th><th>Cadastro</th><th>Ações</th></tr>
+              </thead>
+              <tbody id="users-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Category modal -->
+  <div id="cat-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <button class="modal-close" onclick="closeCategoryModal()">✕</button>
+      <div class="modal-title" id="cat-modal-title">Nova Categoria</div>
+      <div id="cat-modal-error" class="auth-alert error hidden" style="margin-bottom:12px"></div>
+      <div class="form-group">
+        <label>Nome *</label>
+        <input type="text" id="cat-name" class="form-control" placeholder="Nome da categoria" />
+      </div>
+      <div class="form-group">
+        <label>Descrição</label>
+        <textarea id="cat-desc" class="form-control" rows="2" placeholder="Descrição opcional..."></textarea>
+      </div>
+      <div class="form-group">
+        <label>Cor (hex)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="color" id="cat-color-picker" value="#D4A853" style="width:40px;height:36px;border:none;cursor:pointer;border-radius:4px;background:none" />
+          <input type="text" id="cat-color" class="form-control" value="#D4A853" style="flex:1" placeholder="#D4A853" />
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button class="btn btn-outline" onclick="closeCategoryModal()">Cancelar</button>
+        <button class="btn btn-gold" onclick="saveCategory()">Salvar</button>
+      </div>
+      <input type="hidden" id="cat-edit-id" value="" />
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="/app.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/socket.js"></script>
+  <script>
+    // ── Guard ───────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!Auth.requireAdmin()) return;
+      renderHeader();
+      initAdmin();
+    });
+
+    // ── Section navigation ──────────────────────────────
+    function showSection(name) {
+      document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.admin-nav-item').forEach(n => n.classList.remove('active'));
+      const section = document.getElementById('section-' + name);
+      const navItem = document.querySelector(`[data-section="${name}"]`);
+      if (section) section.classList.add('active');
+      if (navItem) navItem.classList.add('active');
+
+      // Lazy load section data
+      if (name === 'dashboard') loadDashboard();
+      if (name === 'posts') loadPostsTable();
+      if (name === 'categories') loadCategoriesTable();
+      if (name === 'comments') loadCommentsTable();
+      if (name === 'users') loadUsersTable();
+      if (name === 'post-editor') {
+        document.getElementById('editor-title').textContent = 'NOVO POST';
+        loadCategoriesSelect();
+      }
+    }
+
+    document.querySelectorAll('.admin-nav-item').forEach(item => {
+      item.addEventListener('click', () => showSection(item.dataset.section));
+    });
+
+    // ── Init ────────────────────────────────────────────
+    function initAdmin() {
+      // Hide users nav if not owner
+      if (!Auth.isOwner()) document.getElementById('nav-users').style.display = 'none';
+
+      // Check URL params
+      const p = new URLSearchParams(window.location.search);
+      const section = p.get('section') || 'dashboard';
+      const editId = p.get('edit');
+
+      if (editId && section === 'posts') {
+        loadEditPost(parseInt(editId));
+      } else {
+        showSection(section);
+      }
+    }
+
+    // ── DASHBOARD ───────────────────────────────────────
+    async function loadDashboard() {
+      try {
+        const analytics = await api.get('/api/analytics/overview');
+
+        const statsConfig = [
+          { label: 'Posts',             value: analytics.totalPosts,        icon: '📝', color: 'var(--gold)' },
+          { label: 'Usuários',          value: analytics.totalUsers,        icon: '👥', color: 'var(--purple)' },
+          { label: 'Comentários',       value: analytics.totalComments,     icon: '💬', color: 'var(--blue)' },
+          { label: 'Visualizações',     value: analytics.totalViews,        icon: '👁', color: 'var(--green)' },
+          { label: 'Curtidas',          value: analytics.totalLikes,        icon: '❤️', color: 'var(--red)' },
+          { label: 'Posts esta semana', value: analytics.postsThisWeek,     icon: '📈', color: '#f59e0b' },
+          { label: 'Coments semana',    value: analytics.commentsThisWeek,  icon: '💬', color: '#8b5cf6' },
+          { label: 'Top Posts',         value: analytics.topPosts?.length ?? 0, icon: '🏆', color: '#ec4899' }
+        ];
+
+        const grid = document.getElementById('stats-grid');
+        grid.innerHTML = statsConfig.map(s => `
+          <div class="stat-card" style="border-top-color:${s.color}">
+            <div class="label">${s.label}</div>
+            <div class="value" style="color:${s.color}">${(s.value || 0).toLocaleString('pt-BR')}</div>
+          </div>
+        `).join('');
+
+        // Top posts
+        const listEl = document.getElementById('top-posts-list');
+        if (analytics.topPosts && analytics.topPosts.length > 0) {
+          listEl.innerHTML = analytics.topPosts.map((p, i) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+              <div style="display:flex;align-items:center;gap:12px;min-width:0">
+                <span style="font-family:var(--font-head);font-size:.65rem;color:var(--gold);width:18px;text-align:center">${i+1}</span>
+                <a href="/post.html?id=${p.slug}" style="font-size:.85rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px;transition:color .2s"
+                  onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${escHtml(p.title)}</a>
+              </div>
+              <div style="display:flex;align-items:center;gap:16px;font-size:.72rem;color:var(--muted);flex-shrink:0">
+                <span>👁 ${p.viewCount||0}</span>
+                <button class="btn btn-outline btn-sm" onclick="loadEditPost(${p.id})">Editar</button>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          listEl.innerHTML = '<div class="empty-state"><p>Sem posts ainda</p></div>';
+        }
+      } catch (err) {
+        Toast.error('Erro ao carregar dashboard: ' + err.message);
+      }
+    }
+
+    // ── POSTS TABLE ─────────────────────────────────────
+    async function loadPostsTable() {
+      const tbody = document.getElementById('posts-table-body');
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Carregando...</td></tr>';
+      try {
+        const data = await api.get('/api/posts?limit=50');
+        if (!data.posts || data.posts.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">Nenhum post ainda</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.posts.map(p => `
+          <tr>
+            <td style="max-width:240px"><a href="/post.html?id=${p.slug}" style="color:var(--text);transition:color .2s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='var(--text)'">${escHtml(p.title)}</a></td>
+            <td>${p.category ? `<span class="cat-badge" style="color:${p.category.color||'var(--gold)'}">${escHtml(p.category.name)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+            <td>
+              ${p.isPinned ? '<span class="cat-badge pinned-badge" style="font-size:.55rem">📌</span> ' : ''}
+              ${p.isFeatured ? '<span class="cat-badge featured-badge" style="font-size:.55rem">⭐</span>' : ''}
+              ${!p.isPinned && !p.isFeatured ? '<span style="color:var(--muted)">—</span>' : ''}
+            </td>
+            <td style="font-family:var(--font-head);font-size:.72rem">${p.viewCount||0}</td>
+            <td style="font-family:var(--font-head);font-size:.72rem">${p.likeCount||0}</td>
+            <td style="font-family:var(--font-head);font-size:.72rem">${p.commentCount||0}</td>
+            <td style="font-size:.72rem;color:var(--muted);white-space:nowrap">${formatDate(p.createdAt)}</td>
+            <td>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-outline btn-sm" onclick="loadEditPost(${p.id})">Editar</button>
+                <button class="btn btn-danger btn-sm" onclick="deletePost(${p.id})">Del</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" style="color:var(--red);text-align:center;padding:20px">Erro: ${escHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    async function deletePost(id) {
+      if (!confirm('Deletar este post? Esta ação é irreversível.')) return;
+      try {
+        await api.del('/api/posts/' + id);
+        Toast.success('Post deletado');
+        loadPostsTable();
+      } catch (err) {
+        Toast.error('Erro: ' + err.message);
+      }
+    }
+
+    // ── POST EDITOR ─────────────────────────────────────
+    let previewOpen = false;
+
+    function togglePreview() {
+      previewOpen = !previewOpen;
+      const col = document.getElementById('editor-preview-col');
+      const btn = document.getElementById('preview-toggle');
+      const split = document.getElementById('editor-split');
+      if (previewOpen) {
+        col.classList.remove('hidden');
+        split.style.gridTemplateColumns = '1fr 1fr';
+        btn.textContent = '✕ Fechar Preview';
+        updatePreview();
+      } else {
+        col.classList.add('hidden');
+        split.style.gridTemplateColumns = '1fr';
+        btn.textContent = '👁 Preview';
+      }
+    }
+
+    function updatePreview() {
+      const content = document.getElementById('ed-content').value;
+      const preview = document.getElementById('md-preview');
+      if (preview && typeof marked !== 'undefined') {
+        preview.innerHTML = marked.parse(content || '');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const contentArea = document.getElementById('ed-content');
+      if (contentArea) {
+        contentArea.addEventListener('input', () => { if (previewOpen) updatePreview(); });
+      }
+    });
+
+    async function loadCategoriesSelect() {
+      try {
+        const cats = await api.get('/api/categories');
+        const sel = document.getElementById('ed-category');
+        sel.innerHTML = '<option value="">Sem categoria</option>';
+        cats.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = c.name;
+          sel.appendChild(opt);
+        });
+      } catch {}
+    }
+
+    async function loadEditPost(id) {
+      showSection('post-editor');
+      document.getElementById('editor-title').textContent = 'EDITAR POST';
+      document.getElementById('save-post-btn').textContent = '💾 Atualizar';
+      try {
+        await loadCategoriesSelect();
+        const post = await api.get('/api/posts/' + id);
+        document.getElementById('ed-post-id').value = post.id;
+        document.getElementById('ed-title').value = post.title || '';
+        document.getElementById('ed-content').value = post.content || '';
+        document.getElementById('ed-excerpt').value = post.excerpt || '';
+        document.getElementById('ed-cover').value = post.coverImageUrl || '';
+        document.getElementById('ed-tags').value = (post.tags || []).join(', ');
+        document.getElementById('ed-pinned').checked = !!post.isPinned;
+        document.getElementById('ed-featured').checked = !!post.isFeatured;
+        if (post.categoryId) document.getElementById('ed-category').value = post.categoryId;
+      } catch (err) {
+        Toast.error('Erro ao carregar post: ' + err.message);
+      }
+    }
+
+    function resetEditor() {
+      document.getElementById('ed-post-id').value = '';
+      document.getElementById('ed-title').value = '';
+      document.getElementById('ed-content').value = '';
+      document.getElementById('ed-excerpt').value = '';
+      document.getElementById('ed-cover').value = '';
+      document.getElementById('ed-tags').value = '';
+      document.getElementById('ed-pinned').checked = false;
+      document.getElementById('ed-featured').checked = false;
+      document.getElementById('ed-category').value = '';
+      document.getElementById('save-post-btn').textContent = '💾 Salvar';
+      document.getElementById('editor-title').textContent = 'NOVO POST';
+      document.getElementById('editor-error').classList.add('hidden');
+    }
+
+    async function savePost() {
+      const errEl = document.getElementById('editor-error');
+      errEl.classList.add('hidden');
+
+      const title   = document.getElementById('ed-title').value.trim();
+      const content = document.getElementById('ed-content').value.trim();
+      if (!title)   { errEl.textContent = 'Título é obrigatório'; errEl.classList.remove('hidden'); return; }
+      if (!content) { errEl.textContent = 'Conteúdo é obrigatório'; errEl.classList.remove('hidden'); return; }
+
+      const tagsRaw = document.getElementById('ed-tags').value;
+      const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+      const body = {
+        title, content,
+        excerpt:       document.getElementById('ed-excerpt').value.trim() || null,
+        coverImageUrl: document.getElementById('ed-cover').value.trim() || null,
+        categoryId:    document.getElementById('ed-category').value || null,
+        tags,
+        isPinned:   document.getElementById('ed-pinned').checked,
+        isFeatured: document.getElementById('ed-featured').checked
+      };
+
+      const btn = document.getElementById('save-post-btn');
+      btn.disabled = true;
+      btn.textContent = 'Salvando...';
+
+      try {
+        const postId = document.getElementById('ed-post-id').value;
+        if (postId) {
+          await api.patch('/api/posts/' + postId, body);
+          Toast.success('Post atualizado!');
+        } else {
+          await api.post('/api/posts', body);
+          Toast.success('Post criado!');
+          resetEditor();
+        }
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = postId ? '💾 Atualizar' : '💾 Salvar';
+      }
+    }
+
+    // ── CATEGORIES ──────────────────────────────────────
+    async function loadCategoriesTable() {
+      const tbody = document.getElementById('categories-table-body');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--muted)">Carregando...</td></tr>';
+      try {
+        const cats = await api.get('/api/categories');
+        if (!cats || cats.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Nenhuma categoria</td></tr>';
+          return;
+        }
+        tbody.innerHTML = cats.map(c => `
+          <tr>
+            <td style="font-weight:600">${escHtml(c.name)}</td>
+            <td style="font-size:.75rem;color:var(--muted)">${escHtml(c.slug)}</td>
+            <td><span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:${c.color||'#666'};vertical-align:middle;margin-right:6px"></span><span style="font-size:.75rem">${escHtml(c.color||'—')}</span></td>
+            <td style="font-family:var(--font-head);font-size:.72rem">${c.postCount||0}</td>
+            <td>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-outline btn-sm" onclick="editCategory(${c.id},'${escHtml(c.name)}','${escHtml(c.description||'')}','${escHtml(c.color||'#D4A853')}')">Editar</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteCategory(${c.id})">Del</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--red);text-align:center;padding:16px">Erro: ${escHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    function showCategoryModal(id, name, desc, color) {
+      document.getElementById('cat-edit-id').value = id || '';
+      document.getElementById('cat-modal-title').textContent = id ? 'Editar Categoria' : 'Nova Categoria';
+      document.getElementById('cat-name').value = name || '';
+      document.getElementById('cat-desc').value = desc || '';
+      document.getElementById('cat-color').value = color || '#D4A853';
+      document.getElementById('cat-color-picker').value = color || '#D4A853';
+      document.getElementById('cat-modal-error').classList.add('hidden');
+      document.getElementById('cat-modal').classList.remove('hidden');
+    }
+
+    function editCategory(id, name, desc, color) { showCategoryModal(id, name, desc, color); }
+    function closeCategoryModal() { document.getElementById('cat-modal').classList.add('hidden'); }
+
+    document.getElementById('cat-color-picker').addEventListener('input', function() {
+      document.getElementById('cat-color').value = this.value;
+    });
+    document.getElementById('cat-color').addEventListener('input', function() {
+      if (/^#[0-9a-fA-F]{6}$/.test(this.value)) document.getElementById('cat-color-picker').value = this.value;
+    });
+
+    async function saveCategory() {
+      const errEl = document.getElementById('cat-modal-error');
+      errEl.classList.add('hidden');
+      const name = document.getElementById('cat-name').value.trim();
+      if (!name) { errEl.textContent = 'Nome é obrigatório'; errEl.classList.remove('hidden'); return; }
+
+      const body = {
+        name,
+        description: document.getElementById('cat-desc').value.trim() || null,
+        color: document.getElementById('cat-color').value.trim() || null
+      };
+
+      try {
+        const id = document.getElementById('cat-edit-id').value;
+        if (id) {
+          await api.patch('/api/categories/' + id, body);
+          Toast.success('Categoria atualizada!');
+        } else {
+          await api.post('/api/categories', body);
+          Toast.success('Categoria criada!');
+        }
+        closeCategoryModal();
+        loadCategoriesTable();
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    async function deleteCategory(id) {
+      if (!confirm('Deletar esta categoria? Os posts não serão deletados, apenas a associação.')) return;
+      try {
+        await api.del('/api/categories/' + id);
+        Toast.success('Categoria deletada');
+        loadCategoriesTable();
+      } catch (err) {
+        Toast.error('Erro: ' + err.message);
+      }
+    }
+
+    // ── COMMENTS TABLE ──────────────────────────────────
+    async function loadCommentsTable() {
+      const tbody = document.getElementById('comments-table-body');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--muted)">Carregando...</td></tr>';
+      try {
+        const comments = await api.get('/api/comments');
+        document.getElementById('comments-count').textContent = comments.length + ' comentários';
+        if (!comments || comments.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--muted)">Nenhum comentário</td></tr>';
+          return;
+        }
+        tbody.innerHTML = comments.map(c => `
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="font-size:.8rem;font-weight:600">${escHtml(c.author?.username||'?')}</div>
+                <span class="role-badge role-${c.author?.role||'USER'}" style="font-size:.55rem">${c.author?.role||'USER'}</span>
+              </div>
+            </td>
+            <td style="max-width:260px;font-size:.82rem;color:var(--text)">${escHtml(c.content.slice(0,100))}${c.content.length>100?'…':''}</td>
+            <td><a href="/post.html?id=${c.post?.slug||c.postId}" style="font-size:.78rem;color:var(--gold)">${escHtml(c.post?.title||'Post #'+c.postId)}</a></td>
+            <td style="font-size:.72rem;color:var(--muted);white-space:nowrap">${formatRelative(c.createdAt)}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="deleteAdminComment(${c.id})">Del</button></td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--red);text-align:center;padding:16px">Erro: ${escHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    window.deleteAdminComment = async function(id) {
+      if (!confirm('Deletar este comentário?')) return;
+      try {
+        await api.del('/api/comments/' + id);
+        Toast.success('Comentário deletado');
+        loadCommentsTable();
+      } catch (err) {
+        Toast.error('Erro: ' + err.message);
+      }
+    };
+
+    // ── USERS TABLE ─────────────────────────────────────
+    async function loadUsersTable() {
+      if (!Auth.isOwner()) {
+        document.getElementById('section-users').innerHTML = '<div class="empty-state"><div class="icon">🔒</div><p>Apenas OWNER pode gerenciar usuários</p></div>';
+        return;
+      }
+      const tbody = document.getElementById('users-table-body');
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--muted)">Carregando...</td></tr>';
+      try {
+        const users = await api.get('/api/users');
+        tbody.innerHTML = users.map(u => `
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                ${avatarEl(u, 'sm').outerHTML}
+                <span style="font-weight:600">${escHtml(u.username)}</span>
+              </div>
+            </td>
+            <td style="font-size:.78rem;color:var(--muted)">${escHtml(u.email)}</td>
+            <td><span class="role-badge role-${u.role}">${u.role}</span></td>
+            <td style="font-size:.72rem;color:var(--muted)">${formatDate(u.createdAt)}</td>
+            <td>
+              <select class="form-control" style="padding:4px 8px;font-size:.72rem;width:auto" onchange="changeRole(${u.id},this.value)" ${u.role==='OWNER'?'disabled':''}>
+                <option value="USER"  ${u.role==='USER'?'selected':''}>USER</option>
+                <option value="ADMIN" ${u.role==='ADMIN'?'selected':''}>ADMIN</option>
+                <option value="OWNER" ${u.role==='OWNER'?'selected':''}>OWNER</option>
+              </select>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:var(--red);text-align:center;padding:16px">Erro: ${escHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    window.changeRole = async function(userId, role) {
+      try {
+        await api.patch('/api/users/' + userId + '/role', { role });
+        Toast.success('Role atualizado!');
+        loadUsersTable();
+      } catch (err) {
+        Toast.error('Erro: ' + err.message);
+        loadUsersTable();
+      }
+    };
+  </script>
+</body>
+</html>

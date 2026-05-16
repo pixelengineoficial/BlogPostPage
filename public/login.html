@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — Nexus Blog</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-title">NEXUS<br/>BLOG</div>
+      <div class="auth-subtitle" id="auth-subtitle">Acesse sua conta</div>
+
+      <div id="auth-alert" class="auth-alert hidden"></div>
+
+      <!-- LOGIN FORM -->
+      <form id="login-form">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="login-email" class="form-control" placeholder="seu@email.com" required autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label>Senha</label>
+          <input type="password" id="login-pass" class="form-control" placeholder="••••••••" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn-gold w-full" id="login-btn">Entrar</button>
+      </form>
+
+      <!-- REGISTER FORM -->
+      <form id="register-form" class="hidden">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="reg-username" class="form-control" placeholder="nexusgamer" required autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="reg-email" class="form-control" placeholder="seu@email.com" required autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label>Senha</label>
+          <input type="password" id="reg-pass" class="form-control" placeholder="Mínimo 6 caracteres" required autocomplete="new-password" />
+        </div>
+        <button type="submit" class="btn btn-gold w-full" id="reg-btn">Criar conta</button>
+      </form>
+
+      <div class="auth-toggle" id="auth-toggle">
+        <span>Não tem conta? </span>
+        <button id="toggle-btn" type="button">Registrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script>
+    // If already logged in, redirect to home
+    (function () {
+      const token = localStorage.getItem('nexus_token');
+      const user = localStorage.getItem('nexus_user');
+      if (token && user) {
+        window.location.replace('/');
+      }
+    })();
+
+    let mode = 'login';
+
+    const loginForm    = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    const toggleBtn    = document.getElementById('toggle-btn');
+    const subtitle     = document.getElementById('auth-subtitle');
+    const toggleWrap   = document.getElementById('auth-toggle');
+    const alertBox     = document.getElementById('auth-alert');
+
+    function showAlert(msg, type = 'error') {
+      alertBox.textContent = msg;
+      alertBox.className = 'auth-alert ' + type;
+    }
+    function clearAlert() {
+      alertBox.className = 'auth-alert hidden';
+      alertBox.textContent = '';
+    }
+
+    toggleBtn.addEventListener('click', () => {
+      clearAlert();
+      if (mode === 'login') {
+        mode = 'register';
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
+        subtitle.textContent = 'Crie sua conta';
+        toggleWrap.innerHTML = '<span>Já tem conta? </span><button id="toggle-btn" type="button">Login</button>';
+      } else {
+        mode = 'login';
+        registerForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+        subtitle.textContent = 'Acesse sua conta';
+        toggleWrap.innerHTML = '<span>Não tem conta? </span><button id="toggle-btn" type="button">Registrar</button>';
+      }
+      document.getElementById('toggle-btn').addEventListener('click', arguments.callee);
+    });
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearAlert();
+      const btn = document.getElementById('login-btn');
+      btn.disabled = true;
+      btn.textContent = 'Entrando...';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: document.getElementById('login-email').value.trim(),
+            password: document.getElementById('login-pass').value
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showAlert(data.error || 'Erro ao fazer login');
+          return;
+        }
+        localStorage.setItem('nexus_token', data.token);
+        localStorage.setItem('nexus_user', JSON.stringify(data.user));
+        const redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
+        window.location.replace(redirect);
+      } catch (err) {
+        showAlert('Erro de conexão. Tente novamente.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+      }
+    });
+
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearAlert();
+      const btn = document.getElementById('reg-btn');
+      btn.disabled = true;
+      btn.textContent = 'Criando conta...';
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('reg-username').value.trim(),
+            email: document.getElementById('reg-email').value.trim(),
+            password: document.getElementById('reg-pass').value
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showAlert(data.error || 'Erro ao criar conta');
+          return;
+        }
+        localStorage.setItem('nexus_token', data.token);
+        localStorage.setItem('nexus_user', JSON.stringify(data.user));
+        const redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
+        window.location.replace(redirect);
+      } catch (err) {
+        showAlert('Erro de conexão. Tente novamente.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Criar conta';
+      }
+    });
+  </script>
+</body>
+</html>

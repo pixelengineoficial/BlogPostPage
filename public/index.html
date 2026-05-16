@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus Blog — Retro Gamer & Anime</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+  <header id="site-header"></header>
+
+  <main class="container" style="padding-top:24px;padding-bottom:40px">
+
+    <!-- New post banner (realtime) -->
+    <div id="new-post-banner" class="new-post-banner hidden">
+      <span>⚡ Novo post publicado! Clique para atualizar.</span>
+      <button class="btn btn-gold btn-sm" onclick="location.reload()">Atualizar</button>
+    </div>
+
+    <div class="layout">
+      <!-- MAIN FEED -->
+      <section>
+
+        <!-- Filter bar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+          <div id="filter-label" style="font-family:var(--font-head);font-size:.75rem;color:var(--muted)">Todos os posts</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap" id="active-filters"></div>
+        </div>
+
+        <!-- Posts grid -->
+        <div id="posts-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px"></div>
+
+        <!-- Pagination -->
+        <div id="pagination" class="pagination"></div>
+      </section>
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar" id="sidebar"></aside>
+    </div>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-logo">NEXUS BLOG</div>
+      <div class="footer-text">© 2024 Nexus Blog — Feito com ❤️ para gamers</div>
+    </div>
+  </footer>
+
+  <div id="toast-container"></div>
+
+  <script src="/app.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/socket.js"></script>
+  <script>
+    let currentPage = 1;
+    let currentFilters = {};
+    let totalPosts = 0;
+    const LIMIT = 10;
+
+    // Parse URL params
+    function parseFilters() {
+      const p = new URLSearchParams(window.location.search);
+      const filters = {};
+      if (p.get('search'))   filters.search = p.get('search');
+      if (p.get('category')) filters.categoryId = p.get('category');
+      if (p.get('tag'))      filters.tag = p.get('tag');
+      if (p.get('page'))     currentPage = parseInt(p.get('page')) || 1;
+      return filters;
+    }
+
+    async function loadPosts(page = 1) {
+      currentPage = page;
+      const grid = document.getElementById('posts-grid');
+      grid.innerHTML = Array(4).fill(`
+        <div class="card" style="overflow:hidden">
+          <div class="skeleton post-card-cover-placeholder"></div>
+          <div style="padding:14px">
+            <div class="skeleton" style="height:14px;margin-bottom:8px"></div>
+            <div class="skeleton" style="height:10px;width:70%"></div>
+          </div>
+        </div>
+      `).join('');
+
+      const qs = new URLSearchParams({ page, limit: LIMIT });
+      Object.entries(currentFilters).forEach(([k, v]) => { if (v) qs.set(k, v); });
+
+      try {
+        const data = await api.get('/api/posts?' + qs.toString());
+        totalPosts = data.total;
+        renderPosts(data.posts);
+        renderPagination(data.total, page);
+        updateURL();
+      } catch (err) {
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="icon">⚠️</div><p>Erro ao carregar posts</p></div>`;
+      }
+    }
+
+    function renderPosts(posts) {
+      const grid = document.getElementById('posts-grid');
+      grid.innerHTML = '';
+      if (!posts || posts.length === 0) {
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="icon">🎮</div><p>Nenhum post encontrado</p></div>`;
+        return;
+      }
+      posts.forEach(p => grid.appendChild(postCardEl(p)));
+    }
+
+    function renderPagination(total, page) {
+      const totalPages = Math.ceil(total / LIMIT);
+      const pag = document.getElementById('pagination');
+      pag.innerHTML = '';
+      if (totalPages <= 1) return;
+
+      const prev = document.createElement('button');
+      prev.className = 'page-btn';
+      prev.textContent = '← Anterior';
+      prev.disabled = page <= 1;
+      prev.addEventListener('click', () => loadPosts(page - 1));
+      pag.appendChild(prev);
+
+      for (let i = 1; i <= totalPages; i++) {
+        if (totalPages > 7 && Math.abs(i - page) > 2 && i !== 1 && i !== totalPages) {
+          if (i === 2 || i === totalPages - 1) {
+            const dot = document.createElement('span');
+            dot.textContent = '…';
+            dot.style.cssText = 'color:var(--muted);padding:0 4px';
+            pag.appendChild(dot);
+          }
+          continue;
+        }
+        const btn = document.createElement('button');
+        btn.className = 'page-btn' + (i === page ? ' active' : '');
+        btn.textContent = i;
+        btn.addEventListener('click', () => loadPosts(i));
+        pag.appendChild(btn);
+      }
+
+      const next = document.createElement('button');
+      next.className = 'page-btn';
+      next.textContent = 'Próximo →';
+      next.disabled = page >= totalPages;
+      next.addEventListener('click', () => loadPosts(page + 1));
+      pag.appendChild(next);
+    }
+
+    function updateURL() {
+      const qs = new URLSearchParams();
+      if (currentFilters.search)    qs.set('search', currentFilters.search);
+      if (currentFilters.categoryId) qs.set('category', currentFilters.categoryId);
+      if (currentFilters.tag)        qs.set('tag', currentFilters.tag);
+      if (currentPage > 1) qs.set('page', currentPage);
+      const str = qs.toString();
+      history.replaceState({}, '', str ? '?' + str : '/');
+    }
+
+    function updateFilterLabel() {
+      const label = document.getElementById('filter-label');
+      const filters = document.getElementById('active-filters');
+      filters.innerHTML = '';
+
+      if (currentFilters.search) {
+        label.textContent = `Buscando por: "${currentFilters.search}"`;
+        const pill = document.createElement('span');
+        pill.innerHTML = `Busca: ${escHtml(currentFilters.search)} <button onclick="clearFilter('search')" style="margin-left:4px;background:none;border:none;color:var(--red);cursor:pointer">✕</button>`;
+        pill.className = 'cat-badge';
+        filters.appendChild(pill);
+      } else if (currentFilters.tag) {
+        label.textContent = `Tag: #${currentFilters.tag}`;
+        const pill = document.createElement('span');
+        pill.innerHTML = `#${escHtml(currentFilters.tag)} <button onclick="clearFilter('tag')" style="margin-left:4px;background:none;border:none;color:var(--red);cursor:pointer">✕</button>`;
+        pill.className = 'cat-badge';
+        filters.appendChild(pill);
+      } else if (currentFilters.categoryId) {
+        label.textContent = 'Filtrando por categoria';
+      } else {
+        label.textContent = `${totalPosts} posts`;
+      }
+    }
+
+    window.clearFilter = function(key) {
+      delete currentFilters[key];
+      currentPage = 1;
+      updateFilterLabel();
+      loadPosts(1);
+    };
+
+    // Realtime: new post banner
+    window.addEventListener('nexus:new_post', () => {
+      document.getElementById('new-post-banner').classList.remove('hidden');
+    });
+
+    // Init
+    document.addEventListener('DOMContentLoaded', async () => {
+      renderHeader();
+      highlightNav();
+      currentFilters = parseFilters();
+      updateFilterLabel();
+      await Promise.all([
+        loadPosts(currentPage),
+        renderSidebar(document.getElementById('sidebar'))
+      ]);
+    });
+  </script>
+</body>
+</html>
